@@ -1,0 +1,17 @@
+{
+  "name": "db-migration",
+  "version": "1.0.0",
+  "description": "edjust db migration",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "author": "sreyas",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "mongodb": "^5.2.0",
+    "mysql2": "^3.2.0"
+  }
+}
