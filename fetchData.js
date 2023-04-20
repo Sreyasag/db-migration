@@ -360,58 +360,26 @@ const getCompanies = async () => {
     const sql = 
         `select c.id as _id,
         c.name,
-        u.email,
+		u.email,
         u.mobile as phone,
         c.website_url,
         null as state,
         c.about_us as about,
         c.offerings,
-        (select json_arrayagg(json_object(
-        	"company_name",rcm.name,
-         	"image_url",rcm.image_url,
-            "review_data", (select json_arrayagg(json_object(
-				"rating",tpr.rating,
-				"review",tpr.review,
-				"user_name",tpr.customer_name,
-				"headline",tpr.headline,
-				"sentiment",tpr.sentiment,
-				"review_date",tpr.date,
-				"createdAt",tpr.created_at,
-				"updatedAt",tpr.updated_at 
-				)) from third_party_reviews tpr
-                where tpr.review_company_id = rcm.id),
-			"sentiment", json_object(
-				"positive", (select count(*) 
-					from third_party_reviews 
-                    where review_company_id = rcm.id and sentiment = "Positive"),
-				"neutral", (select count(*) 
-					from third_party_reviews 
-                    where review_company_id = rcm.id and sentiment = "Neutral"),
-				"negative", (select count(*) 
-					from third_party_reviews 
-                    where review_company_id = rcm.id and sentiment = "Negative"),
-				"updatedAt",now() ),
-			"createdAt",rcm.created_at,
-            "updatedAt",rcm.updated_at 
-             
-			)) from review_company_master rcm ) as third_party_reviews,
-        
-        (select json_arrayagg(json_object(
-            "user_id",u1.id,
-            "rating",r.rating,
-            "review",r.description,
-            "sentiment",r.sentiment,
-            "is_approved",r.is_approved,
-            "createdAt",r.created_at,
-            "updatedAt",r.updated_at )) 
-            from review r
-            left join customer c1 on c1.id = r.customer_id 
-            left join users u1 on c1.user_id = u1.id 
-            where r.company_id = c.id) as edjust_user_reviews,
         c.slug_name,
         c.student_count,
         c.headquarter,
         c.founder,
+        if((select count(*) from banner where company_id = c.id)=0, 0, 1) as is_leveraged,
+		(select json_arrayagg(json_object(
+				"country_id", null,
+                "subject", sm1.name,
+                "position", b1.top_sequence,
+                "createdAt", b1.created_at,
+				"updatedAt", b1.updated_at 
+			)) from banner b1
+				left join subject_master sm1 on b1.subject_id = sm1.id
+				where company_id = c.id ) as leverage_info,
         IF(LOCATE(',', c.session_types) > 0, 
             json_array(SUBSTRING_INDEX(c.session_types,', ',1),SUBSTRING_INDEX(c.session_types,', ',-1) ) , 
             json_array(c.session_types) 
@@ -424,6 +392,18 @@ const getCompanies = async () => {
         u.username,
         u.password,
         json_array() as grades,
+        (select json_arrayagg(json_object(
+            "url",i.url,
+            "type",i.type,
+            "subject_id",i.subject_id,
+            "createdAt",i.created_at,
+            "updatedAt",i.updated_at )) 
+            from inventory i
+            where i.company_id = c.id) as inventory,
+        u.password_reset_token as password_reset_token,
+        u.is_active,
+        c.created_at as createdAt,
+        c.updated_at as updatedAt,
         (select json_arrayagg(subject_id) from JSON_TABLE(c.subjects, '$[*]'
                         COLUMNS (
                             subject_id int PATH '$.subject_id'
@@ -439,70 +419,55 @@ const getCompanies = async () => {
             "neutral", c.total_neutral,
             "negative", c.total_negative,
             "updatedAt", null) as 	sentiment,
-            
-		ifnull((select json_arrayagg(json_object(
-			"id",cc.id,
-            "course_name",cm.name,
-           "prices",ifnull((select json_array(
-					json_object(
-						"country_id", 1,
-						"total_price", ifnull(cpn1.india_price,cpn1.price),
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-					json_object(
-						"country_id", 2,
-						"total_price", cpn1.usa_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-					json_object(
-						"country_id", 3,
-						"total_price",cpn1.canada_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-                    json_object(
-						"country_id", 4,
-						"total_price", cpn1.singapore_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-                    json_object(
-						"country_id", 5,
-						"total_price", cpn1.australia_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-                    json_object(
-						"country_id", 6,
-						"total_price", cpn1.middleeast_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-                    json_object(
-						"country_id", 7,
-						"total_price", cpn1.uk_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					),
-                    json_object(
-						"country_id", 8,
-						"total_price", cpn1.china_price,
-						"price_per_session", null,
-						"createdAt", cpn1.created_at,
-						"updatedAt", cpn1.updated_at                        
-					)                    
-				) FROM company_price_number_classes cpn1
-			 	where cpn1.company_id = cc.company_id and cpn1.course_id = cc.course_id
-                group by cpn1.course_id), json_array()),
+        (select json_arrayagg(json_object(
+            "user_id",u1.id,
+            "rating",r.rating,
+            "review",r.description,
+            "sentiment",r.sentiment,
+            "is_approved",r.is_approved,
+            "createdAt",r.created_at,
+            "updatedAt",r.updated_at )) 
+            from review r
+            left join customer c1 on c1.id = r.customer_id 
+            left join users u1 on c1.user_id = u1.id 
+            where r.company_id = c.id) as edjust_user_reviews,
+        
+        (select json_arrayagg(json_object(
+        	"company_name",rcm.name,
+         	"image_url",rcm.image_url,
+            "review_data", (select json_arrayagg(json_object(
+				"rating",tpr.rating,
+				"review",tpr.review,
+				"user_name",tpr.customer_name,
+				"headline",tpr.headline,
+				"sentiment",tpr.sentiment,
+				"review_date",tpr.date,
+				"createdAt",tpr.created_at,
+				"updatedAt",tpr.updated_at 
+				)) from third_party_reviews tpr
+                where tpr.review_company_id = rcm.id and tpr.company_id = c.id),
+			"sentiment", json_object(
+				"positive", (select count(*) 
+					from third_party_reviews 
+                    where review_company_id = rcm.id and company_id = c.id and sentiment = "Positive"),
+				"neutral", (select count(*) 
+					from third_party_reviews 
+                    where review_company_id = rcm.id and company_id = c.id and sentiment = "Neutral"),
+				"negative", (select count(*) 
+					from third_party_reviews 
+                    where review_company_id = rcm.id and company_id = c.id and sentiment = "Negative"),
+				"updatedAt",now() ),
+			"createdAt",rcm.created_at,
+            "updatedAt",rcm.updated_at 
+             )) from review_company_master rcm ) as third_party_reviews,
+             
+       	(select json_arrayagg(json_object(
+			"id",ccid,
+            "course_name", cmname,
+            "subject_id", cpnsubject_id,
+            "grades",(select JSON_ARRAYAGG(cast(gm1.name as unsigned)) 
+			 	FROM grade_master gm1
+			 	where JSON_CONTAINS(ccgrade_ids, cast(gm1.id as char))),
 			"curriculum", ifnull((select json_arrayagg(json_object(
 				"curriculum_name", crlm.name,
                 "topics", ifnull((select json_arrayagg(json_object(
@@ -517,46 +482,89 @@ const getCompanies = async () => {
                 "createdAt",crlm.created_at,
 				"updatedAt",crlm.updated_at
 				)) from curriculum crlm 
-                where crlm.id = cc.curriculum_id ),json_array()),
-            "grades",(select JSON_ARRAYAGG(gm1.name) 
-			 	FROM grade_master gm1
-			 	where JSON_CONTAINS(cc.grade_ids, cast(gm1.id as char))),
-			"number_of_classes",(select ncm.name 
-				from number_of_classes_master ncm 
-                where ncm.id = cc.number_of_class_id),
-			"duration", cm.duration,
-			"format", (select tfm.name
-				from teaching_format_master tfm 
-                where tfm.id = cc.format_id),
-            "createdAt",cc.created_at,
-            "updatedAt",cc.updated_at )) 
-            from company_courses cc
-            left join courses_master cm on cm.id = cc.course_id
-            where cc.company_id = c.id), json_array()) as courses,
-			-- left join company_price_number_classes cpn on cpn.company_id = cc.company_id and cpn.subject_id = cc.subject_id and cpn.number_of_class_id = cc.number_of_class_id
-            -- left join courses_master cm on cm.id = cpn.course_id
-            -- where cc.company_id = c.id), json_array()) as courses,
-        (select json_arrayagg(json_object(
-            "url",i.url,
-            "type",i.type,
-            "subject_id",i.subject_id,
-            "createdAt",i.created_at,
-            "updatedAt",i.updated_at )) 
-            from inventory i
-            where i.company_id = c.id) as inventory,
-        json_object(
-            "token", u.password_reset_token,
-            "used", null,
-            "expiration", null,
-            "createdAt", null,
-            "updatedAt", null
-            ) as password_reset_token,
-        u.is_active,
-        c.created_at as createdAt,
-        c.updated_at as updatedAt
+                where crlm.id = curriculum_id ),json_array()),
+			"prices",ifnull(json_array(
+					json_object(
+						"country_id", 1,
+						"total_price", ifnull(india_price,price),
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+					json_object(
+						"country_id", 2,
+						"total_price", usa_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+					json_object(
+						"country_id", 3,
+						"total_price",canada_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+                    json_object(
+						"country_id", 4,
+						"total_price", singapore_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+                    json_object(
+						"country_id", 5,
+						"total_price", australia_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+                    json_object(
+						"country_id", 6,
+						"total_price", middleeast_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+                    json_object(
+						"country_id", 7,
+						"total_price", uk_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					),
+                    json_object(
+						"country_id", 8,
+						"total_price", china_price,
+						"price_per_session", null,
+						"createdAt", created_at,
+						"updatedAt", updated_at                        
+					)                    
+				) , json_array()),
+            "no_of_classes", no_of_classes,
+            "duration", duration,
+            "format", format,
+            "createdAt", created_at,
+            "updatedAt", updated_at            
+		))
+          
+		from (select cc.id as ccid, cm.id as cmid , cm.name as cmname, cpn.company_id as cpncompany_id, cpn.subject_id as cpnsubject_id,
+			cpn.duration as cpnduration, ncm.name as no_of_classes, cpn.duration as duration, tfm.name as format, cc.grade_ids as ccgrade_ids,
+            cpn.price as price, cpn.india_price as india_price, cpn.usa_price, cpn.canada_price, cpn.singapore_price, cpn.australia_price, cpn.middleeast_price,cpn.uk_price, cpn.china_price,
+            cc.curriculum_id as curriculum_id,
+            cpn.created_at as created_at, cpn.updated_at as updated_at
+			from company_courses cc
+			left join company_price_number_classes cpn on cpn.company_id = cc.company_id and cpn.subject_id = cc.subject_id 
+				and cpn.number_of_class_id = cc.number_of_class_id and JSON_CONTAINS(cc.grade_ids, CAST(cpn.grade_id as CHAR), '$')
+			left join courses_master cm on cm.id = cpn.course_id
+            left join number_of_classes_master ncm on ncm.id = cpn.number_of_class_id
+            left join teaching_format_master tfm on tfm.id = cpn.format_id
+            group by cmid) as a
+		where a.cpncompany_id = c.id
+		group by  a.cpncompany_id) as courses
         
-        from company_master c
-        left join users u on u.id = c.user_id`;
+    from company_master c
+    left join users u on u.id = c.user_id;`;
     
     try {
         const [data] = await db.promise().query(sql);

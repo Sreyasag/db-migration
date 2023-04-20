@@ -21,8 +21,14 @@ const replaceIdBookings = (bookings,countryIdMap, subjectIdMap, companyIdMap) =>
     return updatedBookings;
 }
 
+// const updatedMongoObjArray = mysqlObjArray.map(obj => {
+//     const updatedRefs = obj.refIds.map(refId => mysqlToMongoMap[refId]);
+//     const updatedObj = { ...obj, refIds: updatedRefs };
+//     return updatedObj;
+// });
+
 module.exports = {
     replaceIdActivityLog,
     replaceIdBookings,
-
+    
 }
